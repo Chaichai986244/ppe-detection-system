@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>数据看板 — PPE 安全监测</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body class="dash-shell">
+
+<!-- ═══ TOP BAR ═══ -->
+<header class="dash-topbar">
+  <a href="/" style="display:flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:10px;color:var(--text-dim)">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>返回
+  </a>
+  <span class="dash-title">数据可视化看板</span>
+  <select id="time-range" class="select-dark" onchange="refreshAll()">
+    <option value="all">全部时间</option><option value="today">今日</option>
+  </select>
+  <span id="refresh-info" style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">自动刷新 60s</span>
+</header>
+
+<!-- ═══ FILTERS ═══ -->
+<section style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+  <select id="filter-type" class="select-dark" onchange="refreshAll()"><option value="">全部违规类型</option><option value="NO-Helmet">未戴安全帽</option><option value="NO-Safety Vest">未穿反光衣</option></select>
+  <select id="filter-scene" class="select-dark" onchange="refreshAll()"><option value="">全部场景</option></select>
+  <input type="date" id="filter-date-from" class="select-dark" onchange="refreshAll()">
+  <input type="date" id="filter-date-to" class="select-dark" onchange="refreshAll()">
+  <button class="btn btn-ghost" style="font-size:10px" onclick="clearFilters()">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>重置
+  </button>
+</section>
+
+<!-- ═══ KPI CARDS ═══ -->
+<section class="kpi-row">
+  <div class="kpi-card kpi-cyan">
+    <div class="kpi-value" id="card-total-detections">0</div>
+    <div class="kpi-label">检测总数</div>
+  </div>
+  <div class="kpi-card kpi-red">
+    <div class="kpi-value" id="card-total-violations">0</div>
+    <div class="kpi-label">违规总数</div>
+  </div>
+  <div class="kpi-card kpi-green">
+    <div class="kpi-value" id="card-compliance-rate">100%</div>
+    <div class="kpi-label">合规率</div>
+  </div>
+  <div class="kpi-card kpi-amber">
+    <div class="kpi-value" id="card-today-alarms">0</div>
+    <div class="kpi-label">今日报警</div>
+  </div>
+</section>
+
+<!-- ═══ CHARTS ═══ -->
+<section class="chart-row">
+  <div class="card"><div class="card-header">违规类型分布</div><div class="card-body"><div id="chart-bar" class="chart-box"></div></div></div>
+  <div class="card"><div class="card-header">小时趋势</div><div class="card-body"><div id="chart-line" class="chart-box"></div></div></div>
+</section>
+<section class="chart-row">
+  <div class="card"><div class="card-header">合规占比</div><div class="card-body"><div id="chart-pie" class="chart-box"></div></div></div>
+  <div class="card"><div class="card-header">最新报警记录</div><div class="card-body" style="max-height:300px;overflow-y:auto;padding:0"><table class="data-table"><thead><tr><th>时间</th><th>类型</th><th>等级</th><th>人数</th></tr></thead><tbody id="recent-alarms-body"><tr><td colspan="4" class="empty-cell">暂无数据</td></tr></tbody></table></div></div>
+</section>
+
+<footer style="text-align:center;padding:12px;font-family:var(--font-mono);font-size:9px;color:var(--text-muted)"><span id="last-updated">上次更新：--</span></footer>
+
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

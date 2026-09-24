@@ -1,0 +1,19 @@
+# Web 服务
+flask
+flask-socketio
+flask-cors
+
+# 深度学习（GPU 环境请按 pytorch.org 指引安装对应 CUDA 版本）
+torch
+torchvision
+ultralytics
+
+# 图像处理
+opencv-python
+pillow
+numpy
+
+# notebook 训练 / 绘图
+matplotlib
+pandas
+jupyter

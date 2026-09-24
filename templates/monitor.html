@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>PPE 安全监测 — 实时监控</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+</head>
+<body class="app-shell">
+
+<!-- ═══ TOP BAR ═══ -->
+<header class="topbar">
+  <a href="/" class="topbar-brand">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2L3 7v5c0 5.25 3.85 10.15 9 11 5.15-.85 9-5.75 9-11V7l-9-5z"/><circle cx="12" cy="12" r="2.5"/></svg>
+    <span class="topbar-title">PPE 安全监测</span>
+  </a>
+  <span class="banner-slogan">排查隐患&nbsp;&nbsp;&nbsp;防微杜渐</span>
+  <button class="btn btn-ghost" onclick="openSettings()" title="推送设置" style="padding:4px 8px">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+  </button>
+  <span class="topbar-spacer"></span>
+  <div class="topbar-status">
+    <span id="device-badge" class="badge badge-info">GPU</span>
+    <span id="connection-dot" class="status-dot dead"></span>
+    <span id="connection-text">未连接</span>
+  </div>
+</header>
+
+<!-- ═══ BODY: LEFT CONTROL + RIGHT VIZ ═══ -->
+<div class="app-body">
+
+  <!-- ── LEFT: Control Panel (full height) ── -->
+  <section class="control-panel" id="control-panel">
+
+    <!-- Video -->
+    <div class="video-viewport" id="video-viewport">
+      <video id="webcam-video" autoplay playsinline muted style="display:none"></video>
+      <canvas id="display-canvas"></canvas>
+      <canvas id="overlay-canvas"></canvas>
+      <div id="no-signal" class="video-placeholder">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        <p>摄像头未启动</p><small>点击「开始检测」</small>
+      </div>
+      <div id="alarm-popup" class="alarm-overlay hidden">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span id="alarm-popup-text"></span>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="ctrl-section">
+      <div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="stat-tile">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2"><circle cx="12" cy="5" r="2"/><path d="M12 7v7"/><path d="M8 18c0-2.21 1.79-4 4-4s4 1.79 4 4"/></svg>
+          <div class="stat-value" id="val-detections">0</div><div class="stat-label">检测人数</div></div>
+        <div class="stat-tile alarm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <div class="stat-value" id="val-violations">0</div><div class="stat-label">违规数量</div></div>
+        <div class="stat-tile ok">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <div class="stat-value" id="val-compliance">--</div><div class="stat-label">合规率</div></div>
+        <div class="stat-tile">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <div class="stat-value" id="val-uptime">00:00</div><div class="stat-label">运行时长</div></div>
+      </div>
+      <div class="stat-grid" style="grid-template-columns:repeat(2,1fr);margin-top:4px">
+        <div class="stat-tile" style="border-color:rgba(0,200,83,.3)">
+          <div class="stat-value" id="val-in" style="color:var(--green);font-size:1.1em">0</div><div class="stat-label">进入 IN</div></div>
+        <div class="stat-tile" style="border-color:rgba(255,61,0,.3)">
+          <div class="stat-value" id="val-out" style="color:var(--red);font-size:1.1em">0</div><div class="stat-label">离开 OUT</div></div>
+      </div>
+    </div>
+
+    <!-- Labels -->
+    <div class="ctrl-section">
+      <div class="ctrl-section-title">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+        检测标签
+      </div>
+      <div class="chip-group" id="class-toggle-group"></div>
+    </div>
+
+    <!-- Scene + Confidence -->
+    <div class="ctrl-section">
+      <div class="ctrl-section-title">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+        场景与参数
+      </div>
+      <div style="display:flex;gap:4px;align-items:center;margin-bottom:4px">
+        <select id="scene-select" class="select-dark" style="flex:1">{% for s in scenes %}<option value="{{ s.key }}">{{ s.name }}</option>{% endfor %}</select>
+        <select id="location-select" class="select-dark" style="flex:1"></select>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span style="font-size:10px;color:var(--text-dim)">置信度</span>
+        <input type="range" id="confidence-slider" min="10" max="90" value="25" step="5" style="flex:1">
+        <span id="conf-value" style="font-family:var(--font-mono);font-size:10px;color:var(--cyan)">0.25</span>
+      </div>
+      <div id="scene-rules-hint" style="margin-top:4px"></div>
+    </div>
+
+    <!-- Alarm Status -->
+    <div class="ctrl-section">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="alarm-lights">
+          <span class="alarm-light on-green" id="light-green"></span>
+          <span class="alarm-light" id="light-yellow"></span>
+          <span class="alarm-light" id="light-red"></span>
+        </div>
+        <span id="alarm-level-text" style="font-family:var(--font-mono);font-size:10px;font-weight:600;color:var(--green)">正常</span>
+        <span class="topbar-spacer"></span>
+        <span id="dingtalk-status" class="badge badge-info" style="font-size:9px">推送开</span>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="control-bar">
+      <button id="btn-start" class="btn btn-primary" onclick="toggleDetection()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>开始
+      </button>
+      <button id="btn-stop" class="btn btn-danger hidden" onclick="toggleDetection()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>停止
+      </button>
+      <select id="source-select" class="select-dark"><option value="webcam">摄像头</option><option value="video">视频文件</option></select>
+      <select id="model-select" class="select-dark" onchange="switchModel(this.value)">{% for m in models %}<option value="{{ m.key }}" {% if m.key == active_model %}selected{% endif %}>{{ m.name }}</option>{% endfor %}</select>
+      <input type="file" id="video-file-input" accept="video/*" class="hidden">
+      <button id="btn-screenshot" class="btn btn-ghost" onclick="captureScreenshot()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      </button>
+      <span class="fps-text">FPS:<b id="fps-value" style="color:var(--cyan)">0</b> 推理:<b id="inference-fps" style="color:var(--cyan)">0</b></span>
+    </div>
+  </section>
+
+  <!-- ── RIGHT: Visualization Panel (scrollable) ── -->
+  <section class="viz-panel" id="viz-panel">
+
+    <!-- KPI Cards -->
+    <div class="kpi-row">
+      <div class="kpi-card kpi-cyan">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2"><circle cx="12" cy="5" r="2"/><path d="M12 7v7"/><path d="M8 18c0-2.21 1.79-4 4-4s4 1.79 4 4"/></svg><span style="font-size:10px;color:var(--text-dim)">检测总数</span></div>
+        <div class="kpi-value" id="kpi-detections">0</div></div>
+      <div class="kpi-card kpi-red">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg><span style="font-size:10px;color:var(--text-dim)">违规总数</span></div>
+        <div class="kpi-value" id="kpi-violations">0</div></div>
+      <div class="kpi-card kpi-green">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span style="font-size:10px;color:var(--text-dim)">合规率</span></div>
+        <div class="kpi-value" id="kpi-compliance">100%</div></div>
+      <div class="kpi-card kpi-amber">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg><span style="font-size:10px;color:var(--text-dim)">今日报警</span></div>
+        <div class="kpi-value" id="kpi-today">0</div></div>
+    </div>
+
+    <!-- Charts Row 1 -->
+    <div class="chart-row">
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:8px">
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-weight:600">违规类型分布</div>
+        <div id="chart-bar" class="chart-box"></div>
+      </div>
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:8px">
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-weight:600">小时趋势</div>
+        <div id="chart-line" class="chart-box"></div>
+      </div>
+    </div>
+
+    <!-- Charts Row 2 -->
+    <div class="chart-row">
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:8px">
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-weight:600">合规占比</div>
+        <div id="chart-pie" class="chart-box"></div>
+      </div>
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:8px;display:flex;flex-direction:column">
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-weight:600">报警记录</div>
+        <div style="flex:1;overflow-y:auto;max-height:260px">
+          <table class="data-table"><thead><tr><th>时间</th><th>类型</th><th>等级</th></tr></thead>
+          <tbody id="alarm-table-body"><tr><td colspan="3" class="empty-cell">暂无记录</td></tr></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center;padding:8px;font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">
+      <span id="viz-updated">—</span> &middot; 自动刷新 30s
+    </div>
+  </section>
+</div>
+
+<!-- ═══ SETTINGS MODAL ═══ -->
+<div id="settings-overlay" class="modal-overlay hidden" onclick="if(event.target===this)closeSettings()">
+  <div class="modal-card">
+    <div class="modal-header">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      推送设置
+      <button class="btn btn-ghost" style="margin-left:auto;padding:2px 8px" onclick="closeSettings()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="dt-row"><span>启用推送</span><input type="checkbox" id="dingtalk-enabled" checked onchange="saveDt()"></div>
+      <div class="dt-row"><span>推送间隔(秒)</span><input type="number" id="dingtalk-interval" value="300" min="60" max="3600" step="60" onchange="saveDt()"></div>
+      <div class="dt-row"><span>视频结束推送</span><input type="checkbox" id="dingtalk-video-end" checked onchange="saveDt()"></div>
+      <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="testDingtalk()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 2 11 13 7 9"/></svg>发送测试消息
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/monitor.js') }}"></script>
+</body>
+</html>

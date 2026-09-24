@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>模型训练 — PPE 安全监测</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body class="dash-shell">
+
+<header class="dash-topbar">
+  <a href="/" style="display:flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:10px;color:var(--text-dim)">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>返回
+  </a>
+  <span class="dash-title">模型训练进度</span>
+  <span id="status-badge" class="badge badge-info" style="margin-left:auto">监控中</span>
+</header>
+
+<!-- KPI -->
+<section class="kpi-row">
+  <div class="kpi-card kpi-cyan">
+    <div class="kpi-value" id="kpi-epoch">1/100</div><div class="kpi-label">当前轮次</div>
+  </div>
+  <div class="kpi-card kpi-green">
+    <div class="kpi-value" id="kpi-map50">--</div><div class="kpi-label">最佳 mAP@0.5</div>
+  </div>
+  <div class="kpi-card kpi-amber">
+    <div class="kpi-value" id="kpi-map5095">--</div><div class="kpi-label">最佳 mAP@0.5:0.95</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-value" style="color:var(--text)" id="kpi-time">--</div><div class="kpi-label">耗时</div>
+  </div>
+</section>
+
+<!-- Current Metrics -->
+<section class="chart-row">
+  <div class="card">
+    <div class="card-header">当前轮次指标</div>
+    <div class="card-body">
+      <div class="stat-grid">
+        <div class="stat-tile"><div class="stat-value" id="cur-box">--</div><div class="stat-label">Box Loss</div></div>
+        <div class="stat-tile"><div class="stat-value" id="cur-cls">--</div><div class="stat-label">Cls Loss</div></div>
+        <div class="stat-tile"><div class="stat-value" id="cur-dfl">--</div><div class="stat-label">DFL Loss</div></div>
+        <div class="stat-tile"><div class="stat-value" id="cur-prec">--</div><div class="stat-label">Precision</div></div>
+        <div class="stat-tile"><div class="stat-value" id="cur-recall">--</div><div class="stat-label">Recall</div></div>
+        <div class="stat-tile"><div class="stat-value" id="cur-map">--</div><div class="stat-label">mAP@0.5</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">训练状态</div>
+    <div class="card-body">
+      <div id="training-log" style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);max-height:180px;overflow-y:auto;line-height:1.6">
+        <div>等待训练数据...</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Charts -->
+<section class="chart-row">
+  <div class="card"><div class="card-header">Loss 曲线</div><div class="card-body"><div id="chart-loss" style="min-height:300px"></div></div></div>
+  <div class="card"><div class="card-header">mAP 曲线</div><div class="card-body"><div id="chart-map" style="min-height:300px"></div></div></div>
+</section>
+
+<footer style="text-align:center;padding:12px;font-family:var(--font-mono);font-size:9px;color:var(--text-muted)">
+  <span id="last-updated">上次更新：--</span> &middot; 自动刷新：5秒
+</footer>
+
+<script>
+(function(){
+const CLR={bg:'#111922',paper:'#111922',text:'#d4dce6',text2:'#7a8ea0',grid:'#1e3040',cyan:'#00bcd4',green:'#00c853',amber:'#ffab00',red:'#ff3d00'};
+const layout={paper_bgcolor:CLR.paper,plot_bgcolor:CLR.bg,font:{color:CLR.text,size:10},xaxis:{gridcolor:CLR.grid,tickfont:{color:CLR.text2,size:9}},yaxis:{gridcolor:CLR.grid,tickfont:{color:CLR.text2,size:9}},margin:{l:40,r:10,t:8,b:30},legend:{font:{color:CLR.text2,size:9}}};
+
+let epochCount=0;
+async function refresh(){
+  try{
+    const r=await fetch('/api/training/status');
+    const d=await r.json();
+    if(d.error){document.getElementById('training-log').innerHTML='<div>'+d.error+'</div>';return}
+
+    // KPI
+    document.getElementById('kpi-epoch').textContent=d.current_epoch+'/'+d.total_epochs;
+    document.getElementById('kpi-map50').textContent=d.best_map50.toFixed(4);
+    document.getElementById('kpi-map5095').textContent=d.best_map5095.toFixed(4);
+    document.getElementById('kpi-time').textContent=new Date().toLocaleTimeString('zh-CN');
+
+    // Current
+    const c=d.current;
+    document.getElementById('cur-box').textContent=c.box_loss.toFixed(4);
+    document.getElementById('cur-cls').textContent=c.cls_loss.toFixed(4);
+    document.getElementById('cur-dfl').textContent=c.dfl_loss.toFixed(4);
+    document.getElementById('cur-prec').textContent=c.precision.toFixed(4);
+    document.getElementById('cur-recall').textContent=c.recall.toFixed(4);
+    document.getElementById('cur-map').textContent=c.map50.toFixed(4);
+
+    // Log
+    if(d.current_epoch!==epochCount){
+      epochCount=d.current_epoch;
+      const log=document.getElementById('training-log');
+      log.innerHTML='<div>Epoch '+d.current_epoch+'/'+d.total_epochs+' | mAP@0.5: '+c.map50.toFixed(4)+' | Box Loss: '+c.box_loss.toFixed(4)+'</div>'+log.innerHTML;
+      if(log.children.length>20)log.removeChild(log.lastChild);
+    }
+
+    // Charts (only redraw if new data)
+    const h=d.history;
+    if(h.epochs.length>0){
+      // Loss chart
+      const lossTraces=[];
+      ['train/box_loss','train/cls_loss','train/dfl_loss','val/box_loss','val/cls_loss','val/dfl_loss'].forEach(k=>{
+        if(h[k])lossTraces.push({x:h.epochs,y:h[k],type:'scatter',mode:'lines',name:k.replace('/',' '),line:{width:1.5}});
+      });
+      Plotly.react('chart-loss',lossTraces,{...layout,yaxis:{...layout.yaxis,title:'Loss'}});
+
+      // mAP chart
+      const mapTraces=[];
+      ['metrics/mAP50(B)','metrics/mAP50-95(B)','metrics/precision(B)','metrics/recall(B)'].forEach(k=>{
+        if(h[k])mapTraces.push({x:h.epochs,y:h[k],type:'scatter',mode:'lines+markers',name:k.replace('metrics/','').replace('(B)',''),line:{width:2},marker:{size:3}});
+      });
+      Plotly.react('chart-map',mapTraces,{...layout,yaxis:{...layout.yaxis,title:'mAP / P / R',range:[0,1]}});
+    }
+
+    document.getElementById('last-updated').textContent='上次更新：'+new Date().toLocaleTimeString('zh-CN');
+    document.getElementById('status-badge').textContent=d.running?'训练中':'等待中';
+    document.getElementById('status-badge').className=d.running?'badge badge-info':'badge';
+  }catch(e){console.error(e)}
+}
+refresh();setInterval(refresh,5000);
+})();
+</script>
+</body>
+</html>

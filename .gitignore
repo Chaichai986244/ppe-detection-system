@@ -1,0 +1,44 @@
+# ── 数据集（不入库）────────────────────────────────────────────
+archive/
+firc-dataset/
+dataset_train.yaml
+
+# ── 模型权重与训练输出（体积过大，不入库）──────────────────────
+*.pt
+*.pth
+*.onnx
+*.engine
+train_output/
+rcnn_training_output/
+runs/
+
+# ── 运行时生成的文件 ────────────────────────────────────────────
+alarm_img/
+alarm_log.csv
+uploads/
+outputs/
+
+# ── 论文 / PPT / 答辩等非源码材料 ───────────────────────────────
+ppt以及论文/
+ppe-defense_ppt169_20260626/
+*.docx
+*.zip
+fig_*.png
+
+# ── 一次性本地工具脚本 ──────────────────────────────────────────
+add_cell.py
+
+# ── 本地开发环境与编辑器状态 ────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.idea/
+.vscode/
+.reasonix/
+.workbuddy/
+
+# ── 系统文件 ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
